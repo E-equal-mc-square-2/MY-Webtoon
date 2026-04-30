@@ -1,0 +1,6 @@
+{
+  "name": "Midnight Webtoon",
+  "description": "A sleek, dark-mode webtoon reader with a vertical scrolling experience and Google Sheets integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
