@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, Grid, LayoutGrid, ArrowUp, RefreshCw, AlertCircle, Search, Star, Zap, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Grid, LayoutGrid, ArrowUp, RefreshCw, AlertCircle, Search, Star, Zap, X, Download } from 'lucide-react';
 
 // --- Types ---
 interface Episode {
