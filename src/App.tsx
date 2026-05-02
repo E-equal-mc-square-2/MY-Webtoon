@@ -11,7 +11,8 @@ interface Episode {
 }
 
 // --- Constants & Config ---
-const APP_NAME = "MIDNIGHT WEBTOON";
+const APP_NAME = "Kilometres' WEBTOON";
+const APP_ICON = "https://i.imghippo.com/files/yG6513BaA.jpg"; // USER: Replace with your actual icon URL
 const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx0mSpQT93qAojRBY_2gIVAf1JEQFRdnyM2bdysOQ9GhZc2ewk28i9k4WSlGO4f_hMNxw/exec"; 
 
 const MOCK_DATA: Episode[] = [
@@ -52,6 +53,22 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scriptUrl, setScriptUrl] = useState(DEFAULT_SCRIPT_URL);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstall = () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.then(() => setInstallPrompt(null));
+  };
   
   // UI States
   const [searchQuery, setSearchQuery] = useState("");
@@ -146,6 +163,47 @@ export default function App() {
 
   return (
     <div className="min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
+      {/* App Initial Loading Overlay */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div 
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center text-center p-6"
+          >
+            <motion.div 
+              animate={{ 
+                scale: [1, 1.05, 1],
+              }} 
+              transition={{ repeat: Infinity, duration: 3 }}
+              className="relative w-32 h-32 mb-8 rounded-2xl overflow-hidden border-2 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)]"
+            >
+              <img 
+                src={APP_ICON} 
+                className="w-full h-full object-cover" 
+                alt="App Icon"
+                referrerPolicy="no-referrer"
+              />
+            </motion.div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tighter mb-2 italic">Kilometres' WEBTOON</h2>
+            <p className="text-indigo-400 font-bold uppercase tracking-[0.3em] text-[10px] mb-8">Premium Originals</p>
+            
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-zinc-300">Please wait, baby! ❤️</h3>
+              <p className="text-zinc-500 text-sm max-w-[200px] mx-auto">We are getting your library ready...</p>
+              
+              <div className="mt-8 w-48 h-1 bg-white/5 rounded-full overflow-hidden mx-auto relative border border-white/5">
+                <motion.div 
+                  animate={{ x: [-200, 200] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                  className="absolute inset-0 w-1/2 bg-gradient-to-r from-transparent via-indigo-500 to-transparent"
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Navigation Header */}
       <header className="fixed top-0 left-0 right-0 z-50 h-16 md:h-20 bg-white/5 backdrop-blur-2xl border-b border-white/10 flex items-center justify-between px-4 md:px-8 shadow-2xl">
         <div 
@@ -158,16 +216,31 @@ export default function App() {
           className="flex items-center gap-2 md:gap-4 group cursor-pointer select-none"
           id="home-logo"
         >
-          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-indigo-500/20 group-active:scale-95 transition-transform">
-            N
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-indigo-500 flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-indigo-500/20 group-active:scale-95 transition-transform overflow-hidden">
+            <img 
+              src={APP_ICON} 
+              className="w-full h-full object-cover" 
+              alt="Logo"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div className="flex flex-col items-start">
-            <h1 className="text-lg md:text-2xl font-bold tracking-tight text-white leading-none">NEO</h1>
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight text-white leading-none uppercase">Kilometres</h1>
             <span className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] font-semibold text-zinc-500">Premium Originals</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 md:gap-6">
+        <div className="flex items-center gap-2 md:gap-4">
+          {installPrompt && (
+            <button 
+              onClick={handleInstall}
+              className="hidden sm:flex items-center gap-2 bg-indigo-500/20 hover:bg-indigo-500 text-indigo-400 hover:text-white px-4 py-2 border border-indigo-500/30 rounded-full text-xs font-bold transition-all active:scale-95"
+            >
+              <Download className="w-3 h-3" />
+              INSTALL APP
+            </button>
+          )}
+          <div className="flex items-center gap-3 md:gap-6">
           {view === 'home' && (
             <div className="relative hidden md:block">
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -196,7 +269,8 @@ export default function App() {
             </div>
           )}
         </div>
-      </header>
+      </div>
+    </header>
 
       {/* Main Content */}
       <main className="pt-24 md:pt-32 pb-12 px-4 md:px-6 max-w-6xl mx-auto">
@@ -326,7 +400,20 @@ export default function App() {
               className="max-w-4xl mx-auto -mx-4 md:mx-auto"
             >
               {/* Header Info */}
-              <div className="mb-8 md:mb-16 text-center space-y-2 md:space-y-4 px-4">
+              <div className="mb-8 md:mb-16 text-center space-y-2 md:space-y-4 px-4 relative">
+                <div className="absolute right-0 top-0">
+                  <button 
+                    onClick={() => {
+                      episodes[currentEpisodeIndex].imageUrls.forEach((url, i) => {
+                        window.open(url, '_blank');
+                      });
+                    }}
+                    title="Download Chapter"
+                    className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-indigo-400 transition-all border border-white/5 hover:scale-110 active:scale-90"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                </div>
                 <div className="flex items-center justify-center gap-3">
                    <div className="h-[1px] w-8 md:w-12 bg-white/10"></div>
                    <span className="text-[9px] md:text-[10px] uppercase tracking-[0.3em] font-bold text-indigo-400">Chapter {currentEpisode?.episode}</span>

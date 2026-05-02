@@ -1,141 +1,184 @@
 /**
- * GOOGLE APPS SCRIPT CODE
+ * TOON BOT v3.0 - STABLE & SMART
  * 
  * Instructions:
- * 1. Open your Google Sheet.
- * 2. Go to Extensions > Apps Script.
- * 3. Delete any code there and paste this entire file.
- * 4. Fill in the SPREADSHEET_ID and TELEGRAM_TOKEN below.
- * 5. Deploy as "Web App", set access to "Anyone".
- * 6. Run the 'setWebhook' function once after deploying.
+ * 1. Replace ALL code in your Apps Script editor.
+ * 2. Update SPREADSHEET_ID, TELEGRAM_TOKEN, and WEB_APP_URL.
+ * 3. Deploy as "Web App", set access to "Anyone".
+ * 4. Run 'setWebhook' after deploying.
  */
 
-const SPREADSHEET_ID = "1xf0u70mfvq6So3KQMu_CtdMLuehL0YvpqVelTgx5Ylg"; // <-- Put your Sheet ID here
-const TELEGRAM_TOKEN = "8726131273:AAH5K2bzDOvG1Jg6XZCCr_doZH1yQ3o4U04"; // <-- From @BotFather
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx0mSpQT93qAojRBY_2gIVAf1JEQFRdnyM2bdysOQ9GhZc2ewk28i9k4WSlGO4f_hMNxw/exec"; // <-- Get this after deploying
-const ADMIN_CHAT_ID = "2140020900"; // <-- Get yours from @userinfobot to secure the bot
+const SPREADSHEET_ID = "1xf0u70mfvq6So3KQMu_CtdMLuehL0YvpqVelTgx5Ylg"; 
+const TELEGRAM_TOKEN = "8726131273:AAH5K2bzDOvG1Jg6XZCCr_doZH1yQ3o4U04"; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx0mSpQT93qAojRBY_2gIVAf1JEQFRdnyM2bdysOQ9GhZc2ewk28i9k4WSlGO4f_hMNxw/exec"; 
+const ADMIN_CHAT_ID = "2140020900"; 
 
-/**
- * Part 1: The API for the Website (doGet)
- */
 function doGet() {
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getActiveSheet();
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Episodes");
     const data = sheet.getDataRange().getValues();
-    const headers = data.shift(); // Remove: Episode, Title, ImageURLs, Description
-    
+    data.shift(); 
     const episodes = data.map(row => ({
       episode: parseInt(row[0]),
       title: row[1],
       imageUrls: row[2].toString().split(',').map(url => url.trim()).filter(url => url.length > 0),
-      description: row[3] || "No description available."
-    }));
-    
-    // Sort newest first for the website
-    episodes.sort((a, b) => b.episode - a.episode);
-    
-    return ContentService.createTextOutput(JSON.stringify(episodes))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ error: error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+      description: row[3] || ""
+    })).sort((a,b) => b.episode - a.episode);
+    return ContentService.createTextOutput(JSON.stringify(episodes)).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-/**
- * Part 2: Telegram Bot Integration (doPost)
- */
 function doPost(e) {
   try {
     const contents = JSON.parse(e.postData.contents);
     if (!contents.message) return;
     
-    const chatId = contents.message.chat.id;
+    const chatId = String(contents.message.chat.id);
     const text = contents.message.text || "";
-
-    // Welcome message is public
-    if (text === '/start') {
-      sendTelegramMessage(chatId, "Welcome to the Neo Toon Admin Bot!\n\nCommands:\n/upload name: Title, episode: 1, images: url1, url2\n/delete Title\n/list");
-      return;
-    }
-
-    // SECURITY: Check if user is the admin
-    if (String(chatId) !== String(ADMIN_CHAT_ID)) {
-      sendTelegramMessage(chatId, "🚫 Access Denied. Only the owner can manage this library.");
-      return;
-    }
+    const photos = contents.message.photo;
     
-    // Command: /upload name: Title, episode: 1, images: url1, url2...
-    if (text.startsWith('/upload')) {
-      const parts = text.replace('/upload', '').split(',');
-      let name = "", ep = "", images = "", desc = "";
-      
-      parts.forEach(p => {
-        if (p.includes('name:')) name = p.split('name:')[1].trim();
-        if (p.includes('episode:')) ep = p.split('episode:')[1].trim();
-        if (p.includes('images:')) images = p.split('images:')[1].trim();
-        if (p.includes('desc:')) desc = p.split('desc:')[1].trim();
-      });
-      
-      if (!name || !ep || !images) {
-        sendTelegramMessage(chatId, "⚠️ Usage: /upload name: Title, episode: 1, images: url1, url2, desc: optional");
+    if (chatId !== ADMIN_CHAT_ID) {
+      sendTelegramMessage(chatId, "🚫 Access Denied.");
+      return;
+    }
+
+    if (text === '/cancel') {
+      saveState(chatId, null);
+      sendTelegramMessage(chatId, "Got it baby! Action cancelled. 😊");
+      return;
+    }
+
+    const state = getState(chatId);
+
+    // --- UPLOAD / EDIT FLOW ---
+    if (text === '/upload' || text === '/edit') {
+      const titles = getExistingTitles();
+      let msg = text === '/upload' ? "New Upload! " : "Editing! ";
+      msg += titles.length > 0 ? "Existing names or create new?\n\n• " + titles.join("\n• ") : "Create your first webtoon name:";
+      saveState(chatId, { cmd: text.replace('/',''), step: 'name' });
+      sendTelegramMessage(chatId, msg);
+      return;
+    }
+
+    if (state.cmd === 'upload' || state.cmd === 'edit') {
+      if (state.step === 'name') {
+        const count = getEpisodeCount(text);
+        saveState(chatId, { ...state, step: 'ep', title: text });
+        sendTelegramMessage(chatId, `You have ${count} episodes for "${text}"! Episode number is?`);
         return;
       }
-      
-      const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getActiveSheet();
-      sheet.appendRow([ep, name, images, desc]);
-      sendTelegramMessage(chatId, "✅ Successfully uploaded Episode " + ep + ": " + name);
-    }
-    
-    // Command: /delete [title]
-    else if (text.startsWith('/delete')) {
-      const target = text.replace('/delete', '').trim();
-      const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getActiveSheet();
-      const data = sheet.getDataRange().getValues();
-      let deleted = false;
-      
-      for (let i = data.length - 1; i >= 1; i--) {
-        if (data[i][1].toString().toLowerCase() === target.toLowerCase()) {
-          sheet.deleteRow(i + 1);
-          deleted = true;
-        }
+      if (state.step === 'ep') {
+        saveState(chatId, { ...state, step: 'photo', ep: text });
+        sendTelegramMessage(chatId, "Upload photo here (Send the image file) 😊❤");
+        return;
       }
-      sendTelegramMessage(chatId, deleted ? "🗑️ Deleted: " + target : "❌ Episode '" + target + "' not found.");
+      if (state.step === 'photo' && photos) {
+        const fileId = photos[photos.length - 1].file_id;
+        const fileUrl = getTelegramUrl(fileId);
+        addOrUpdateEpisode(state.title, state.ep, fileUrl, state.cmd === 'edit');
+        saveState(chatId, null);
+        sendTelegramMessage(chatId, "Upload Finished!!! Thank you Baby ❤️😊❤");
+        return;
+      }
     }
-    
-    // Command: /list
-    else if (text === '/list') {
-      const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getActiveSheet();
-      const data = sheet.getDataRange().getValues();
-      data.shift(); // Remove headers
-      const list = data.map(r => "• EP " + r[0] + ": " + r[1]).join("\n");
-      sendTelegramMessage(chatId, list ? "📚 Library:\n" + list : "📭 Library is empty.");
+
+    // --- DELETE FLOW ---
+    if (text === '/delete') {
+      const titles = getExistingTitles();
+      if (titles.length === 0) return sendTelegramMessage(chatId, "Library is empty!");
+      saveState(chatId, { cmd: 'delete', step: 'name' });
+      sendTelegramMessage(chatId, "Please type a name to delete:\n\n• " + titles.join("\n• "));
+      return;
     }
-    
-    // Start message - (No longer needed here as handled above)
-    
-  } catch (error) {
-    // Fail gracefully
+
+    if (state.cmd === 'delete') {
+      if (state.step === 'name') {
+        const eps = getEpisodesForTitle(text);
+        saveState(chatId, { ...state, step: 'ep', title: text });
+        sendTelegramMessage(chatId, `Existing episodes for "${text}": ${eps.join(", ")}.\nWhich episode number?`);
+        return;
+      }
+      if (state.step === 'ep') {
+        deleteEpisode(state.title, text);
+        saveState(chatId, null);
+        sendTelegramMessage(chatId, "Finished baby!!! 🗑️❤");
+        return;
+      }
+    }
+
+    if (text === '/list') {
+      const titles = getExistingTitles();
+      sendTelegramMessage(chatId, "📚 LIBRARY:\n" + (titles.join("\n") || "Empty"));
+    }
+
+    if (text === '/start') {
+      sendTelegramMessage(chatId, "Hi Baby! ❤️ Commands:\n/upload - New content\n/edit - Update content\n/delete - Remove content\n/list - View Library");
+    }
+
+  } catch (err) {
+    sendTelegramMessage(ADMIN_CHAT_ID, "⚠️ Error: " + err.message);
+  }
+}
+
+// HELPERS
+function getTelegramUrl(fileId) {
+  const res = JSON.parse(UrlFetchApp.fetch("https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/getFile?file_id=" + fileId).getContentText());
+  return "https://api.telegram.org/file/bot" + TELEGRAM_TOKEN + "/" + res.result.file_path;
+}
+
+function saveState(id, data) {
+  PropertiesService.getScriptProperties().setProperty('state_' + id, data ? JSON.stringify(data) : "");
+}
+
+function getState(id) {
+  const val = PropertiesService.getScriptProperties().getProperty('state_' + id);
+  return val ? JSON.parse(val) : {};
+}
+
+function getExistingTitles() {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Episodes");
+  const titles = sheet.getRange("B2:B").getValues().flat().filter(t => t);
+  return [...new Set(titles)];
+}
+
+function getEpisodeCount(title) {
+  return getEpisodesForTitle(title).length;
+}
+
+function getEpisodesForTitle(title) {
+  const data = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Episodes").getDataRange().getValues();
+  return data.filter(r => r[1] === title).map(r => r[0]);
+}
+
+function addOrUpdateEpisode(title, ep, url, replace) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Episodes");
+  const data = sheet.getDataRange().getValues();
+  let found = false;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === title && String(data[i][0]) === String(ep)) {
+      const newVal = replace ? url : (data[i][2] ? data[i][2] + "," + url : url);
+      sheet.getRange(i + 1, 3).setValue(newVal);
+      found = true; break;
+    }
+  }
+  if (!found) sheet.appendRow([ep, title, url, ""]);
+}
+
+function deleteEpisode(title, ep) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Episodes");
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][1] === title && String(data[i][0]) === String(ep)) sheet.deleteRow(i + 1);
   }
 }
 
 function sendTelegramMessage(chatId, text) {
-  const url = "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendMessage";
-  const payload = {
-    method: "post",
-    payload: {
-      chat_id: String(chatId),
-      text: text
-    }
-  };
-  UrlFetchApp.fetch(url, payload);
+  UrlFetchApp.fetch("https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendMessage", { method: "post", payload: { chat_id: String(chatId), text: text } });
 }
 
-/**
- * Run this function ONCE after deploying to link your bot
- */
 function setWebhook() {
-  const url = "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/setWebhook?url=" + WEB_APP_URL;
-  const response = UrlFetchApp.fetch(url);
-  Logger.log(response.getContentText());
+  const res = UrlFetchApp.fetch("https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/setWebhook?url=" + WEB_APP_URL);
+  Logger.log(res.getContentText());
 }
